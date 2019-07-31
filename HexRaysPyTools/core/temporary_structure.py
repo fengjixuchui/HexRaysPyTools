@@ -1,24 +1,22 @@
 import bisect
-import idc
-import idaapi
-import re
 import itertools
-# import PySide.QtCore as QtCore
-# import PySide.QtGui as QtGui
-import cache
-from HexRaysPyTools.cute import *
+from PyQt5 import QtCore, QtGui, QtWidgets
+
+import idaapi
+import idc
+
+import common
 import const
 import helper
 import variable_scanner
 import HexRaysPyTools.api as api
-import common
 from HexRaysPyTools.forms import MyChoose
 
 
 SCORE_TABLE = dict((v, k) for k, v in enumerate(
     ['unsigned __int8 *', 'unsigned __int8', '__int8 *', '__int8', '_BYTE', '_BYTE *', '_BYTE **', 'const char **',
      'signed __int16', 'unsigned __int16', '__int16', 'signed __int16 *', 'unsigned __int16 *', '__int16 *',
-     '_WORD *', '_WORD **',
+     '_WORD *', '_WORD **', '_QWORD', '_QWORD *',
      'signed int*', 'signed int', 'unsigned int *', 'unsigned int', 'int **', 'char **', 'int *', 'void **',
      'int', '_DWORD *', 'char', '_DWORD', '_WORD', 'void *', 'char *']
 ))
@@ -36,7 +34,7 @@ def parse_vtable_name(address):
         return "Vtable_" + name, False
     name = idc.demangle_name(idaapi.get_name(address), idc.get_inf_attr(idc.INF_SHORT_DN))
     assert name, "Virtual table must have either legal c-type name or mangled name"
-    return common.demangled_name_to_c_str(name), True
+    return common.demangled_name_to_c_str(name).replace("const_", "").replace("::_vftable", "_vtbl"), True
 
 
 class AbstractMember:
@@ -64,7 +62,7 @@ class AbstractMember:
     def switch_array_flag(self):
         self.is_array ^= True
 
-    def activate(self):
+    def activate(self, temp_struct):
         pass
 
     def set_enabled(self, enable):
@@ -208,13 +206,13 @@ class VirtualTable(AbstractMember):
 
         def OnEditLine(self, n):
             """ Scan menu """
-            self.__virtual_table.scan_virtual_function(n)
+            self.__virtual_table.scan_virtual_function(n, self.__temp_struct)
 
     def __init__(self, offset, address, scanned_variable=None, origin=0):
         AbstractMember.__init__(self, offset + origin, scanned_variable, origin)
         self.address = address
         self.virtual_functions = []
-        self.name = "vtable" + ("_{0:X}".format(self.offset) if self.offset else '')
+        self.name = "__vftable" + ("_{0:X}".format(self.offset) if self.offset else "")
         self.vtable_name, self.have_nice_name = parse_vtable_name(address)
         self.populate()
 
@@ -283,9 +281,9 @@ class VirtualTable(AbstractMember):
             print cdecl_typedef
             print "*" * 100
 
-    def show_virtual_functions(self):
+    def show_virtual_functions(self, temp_struct):
         function_chooser = self.VirtualTableChoose(
-            [function.get_information() for function in self.virtual_functions], cache.temporary_structure, self)
+            [function.get_information() for function in self.virtual_functions], temp_struct, self)
 
         idx = function_chooser.Show(True)
         if idx != -1:
@@ -293,7 +291,7 @@ class VirtualTable(AbstractMember):
             virtual_function.visited = True
             virtual_function.show_location()
 
-    def scan_virtual_function(self, index):
+    def scan_virtual_function(self, index, temp_struct):
         if helper.is_imported_ea(self.virtual_functions[index].address):
             print "[INFO] Ignoring import function at 0x{0:08X}".format(self.address)
             return
@@ -306,16 +304,15 @@ class VirtualTable(AbstractMember):
             function = idaapi.decompile(self.virtual_functions[index].address)
         if function.arguments and function.arguments[0].is_arg_var and helper.is_legal_type(function.arguments[0].tif):
             print "[Info] Scanning virtual function at 0x{0:08X}".format(function.entry_ea)
-            # TODO: Remove usage `temporary_structure' as global
             obj = api.VariableObject(function.get_lvars()[0], 0)
-            scanner = variable_scanner.NewDeepSearchVisitor(function, self.offset, obj, cache.temporary_structure)
+            scanner = variable_scanner.NewDeepSearchVisitor(function, self.offset, obj, temp_struct)
             scanner.process()
         else:
             print "[Warning] Bad type of first argument in virtual function at 0x{0:08X}".format(function.entry_ea)
 
-    def scan_virtual_functions(self):
+    def scan_virtual_functions(self, temp_struct):
         for idx in xrange(len(self.virtual_functions)):
-            self.scan_virtual_function(idx)
+            self.scan_virtual_function(idx, temp_struct)
 
     def get_udt_member(self, offset=0):
         udt_member = idaapi.udt_member_t()
@@ -339,8 +336,8 @@ class VirtualTable(AbstractMember):
     def switch_array_flag(self):
         pass
 
-    def activate(self):
-        self.show_virtual_functions()
+    def activate(self, temp_struct):
+        self.show_virtual_functions(temp_struct)
 
     @staticmethod
     def check_address(address):
@@ -406,7 +403,7 @@ class Member(AbstractMember):
         udt_member.size = self.size
         return udt_member
 
-    def activate(self):
+    def activate(self, temp_struct):
         new_type_declaration = idaapi.askstr(0x100, self.type_name, "Enter type:")
         if new_type_declaration is None:
             return
@@ -442,6 +439,7 @@ class VoidMember(Member):
 
 
 class TemporaryStructureModel(QtCore.QAbstractTableModel):
+    default_name = "CHANGE_MY_NAME"
 
     def __init__(self, *args):
         """
@@ -455,7 +453,6 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
         self.headers = ["Offset", "Type", "Name"]
         self.items = []
         self.collisions = []
-        self.structure_name = "CHANGE_MY_NAME"
 
     # OVERLOADED METHODS #
 
@@ -516,10 +513,20 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
 
     def flags(self, index):
         if index.column() == 2:
-            return super(TemporaryStructureModel, self).flags(index) | QtGui.QAbstractItemView.DoubleClicked
+            return super(TemporaryStructureModel, self).flags(index) | QtWidgets.QAbstractItemView.DoubleClicked
         return super(TemporaryStructureModel, self).flags(index)
 
     # HELPER METHODS #
+
+    def get_name(self):
+        candidate_name = None
+        for field in self.items:
+            if isinstance(field, VirtualTable) and field.have_nice_name:
+                if candidate_name:
+                    print "[WARNING] Structure has 2 or more virtual tables. It's name set to default"
+                    return self.default_name
+                candidate_name = field.vtable_name.replace("_vtbl", "")
+        return candidate_name if candidate_name else self.default_name
 
     def pack(self, start=0, stop=None):
         if self.collisions[start:stop].count(True):
@@ -534,7 +541,7 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
         for item in filter(lambda x: x.enabled, self.items[start:stop]):    # Filter disabled members
             gap_size = item.offset - offset
             if gap_size:
-                udt_data.push_back(TemporaryStructureModel.get_padding_member(offset - origin, gap_size))
+                udt_data.push_back(helper.create_padding_udt_member(offset - origin, gap_size))
             if item.is_array:
                 array_size = self.calculate_array_size(bisect.bisect_left(self.items, item))
                 if array_size:
@@ -546,7 +553,7 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
 
         final_tinfo.create_udt(udt_data, idaapi.BTF_STRUCT)
         cdecl = idaapi.print_tinfo(None, 4, 5, idaapi.PRTYPE_MULTI | idaapi.PRTYPE_TYPE | idaapi.PRTYPE_SEMI,
-                                   final_tinfo, self.structure_name, None)
+                                   final_tinfo, self.get_name(), None)
         cdecl = idaapi.asktext(0x10000, '#pragma pack(push, 1)\n' + cdecl, "The following new type will be created")
 
         if cdecl:
@@ -554,11 +561,11 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
             previous_ordinal = idaapi.get_type_ordinal(idaapi.cvar.idati, structure_name)
 
             if previous_ordinal:
-                reply = QtGui.QMessageBox.question(
+                reply = QtWidgets.QMessageBox.question(
                     None,
                     "HexRaysPyTools",
                     "Structure already exist. Do you want to overwrite it?",
-                    QtGui.QMessageBox.Yes | QtGui.QMessageBox.No
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
                 )
                 if reply == QtGui.QMessageBox.Yes:
                     idaapi.del_numbered_type(idaapi.cvar.idati, previous_ordinal)
@@ -678,29 +685,6 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
         if idx != -1:
             return result[idx][1]
         return None
-
-    @staticmethod
-    def get_padding_member(offset, size):
-        udt_member = idaapi.udt_member_t()
-        if size == 1:
-            udt_member.name = "gap_{0:X}".format(offset)
-            udt_member.type = const.BYTE_TINFO
-            udt_member.size = const.BYTE_TINFO.get_size()
-            udt_member.offset = offset
-            return udt_member
-
-        array_data = idaapi.array_type_data_t()
-        array_data.base = 0
-        array_data.elem_type = const.BYTE_TINFO
-        array_data.nelems = size
-        tmp_tinfo = idaapi.tinfo_t()
-        tmp_tinfo.create_array(array_data)
-
-        udt_member.name = "gap_{0:X}".format(offset)
-        udt_member.type = tmp_tinfo
-        udt_member.size = size
-        udt_member.offset = offset
-        return udt_member
 
     # SLOTS #
 
@@ -839,4 +823,4 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
 
         # Double click on type. If type is virtual table than opens windows with virtual methods
         elif index.column() == 1:
-            self.items[index.row()].activate()
+            self.items[index.row()].activate(self)
