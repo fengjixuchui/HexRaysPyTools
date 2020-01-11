@@ -4,7 +4,7 @@ import re
 import idaapi
 import idc
 
-import actions
+from . import actions
 import HexRaysPyTools.core.helper as helper
 import HexRaysPyTools.core.const as const
 
@@ -60,7 +60,7 @@ class CreateNewField(actions.HexRaysPopupAction):
         else:
             default_field_type = "_QWORD" if const.EA64 else "_DWORD"
 
-        declaration = idaapi.asktext(
+        declaration = idaapi.ask_text(
             0x10000, "{0} field_{1:X}".format(default_field_type, offset + idx), "Enter new structure member:"
         )
         if declaration is None:
@@ -78,7 +78,7 @@ class CreateNewField(actions.HexRaysPopupAction):
 
         struct_tinfo.get_udt_details(udt_data)
         udt_member.offset = offset * 8
-        struct_tinfo.find_udt_member(idaapi.STRMEM_OFFSET, udt_member)
+        struct_tinfo.find_udt_member(udt_member, idaapi.STRMEM_OFFSET)
         gap_size = udt_member.size // 8
 
         gap_leftover = gap_size - idx - field_size
@@ -120,7 +120,7 @@ class CreateNewField(actions.HexRaysPopupAction):
             logger.error("Bad field name")
             return
 
-        result = idc.ParseType(type_name, 0)
+        result = idc.parse_decl(type_name, 0)
         if result is None:
             logger.error("Failed to parse member type. It should be like `TYPE_NAME NAME[SIZE]` (Array is optional)")
             return

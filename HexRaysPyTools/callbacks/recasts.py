@@ -1,6 +1,6 @@
 from collections import namedtuple
 import idaapi
-import actions
+from . import actions
 import HexRaysPyTools.core.helper as helper
 
 
@@ -159,13 +159,13 @@ class RecastItemLeft(actions.HexRaysPopupAction):
             hx_view.set_lvar_type(ri.local_variable, ri.recast_tinfo)
 
         elif isinstance(ri, RecastGlobalVariable):
-            idaapi.apply_tinfo2(ri.global_variable_ea, ri.recast_tinfo, idaapi.TINFO_DEFINITE)
+            idaapi.apply_tinfo(ri.global_variable_ea, ri.recast_tinfo, idaapi.TINFO_DEFINITE)
 
         elif isinstance(ri, RecastArgument):
             if ri.recast_tinfo.is_array():
                 ri.recast_tinfo.convert_array_to_ptr()
             helper.set_func_argument(ri.func_tinfo, ri.arg_idx, ri.recast_tinfo)
-            idaapi.apply_tinfo2(ri.func_ea, ri.func_tinfo, idaapi.TINFO_DEFINITE)
+            idaapi.apply_tinfo(ri.func_ea, ri.func_tinfo, idaapi.TINFO_DEFINITE)
 
         elif isinstance(ri, RecastReturn):
             cfunc = helper.decompile_function(ri.func_ea)
@@ -175,7 +175,7 @@ class RecastItemLeft(actions.HexRaysPopupAction):
             func_tinfo = idaapi.tinfo_t()
             cfunc.get_func_type(func_tinfo)
             helper.set_func_return(func_tinfo, ri.recast_tinfo)
-            idaapi.apply_tinfo2(cfunc.entry_ea, func_tinfo, idaapi.TINFO_DEFINITE)
+            idaapi.apply_tinfo(cfunc.entry_ea, func_tinfo, idaapi.TINFO_DEFINITE)
 
         elif isinstance(ri, RecastStructure):
             tinfo = idaapi.tinfo_t()
@@ -186,11 +186,11 @@ class RecastItemLeft(actions.HexRaysPopupAction):
 
             udt_member = idaapi.udt_member_t()
             udt_member.offset = ri.field_offset * 8
-            idx = tinfo.find_udt_member(idaapi.STRMEM_OFFSET, udt_member)
+            idx = tinfo.find_udt_member(udt_member, idaapi.STRMEM_OFFSET)
             if udt_member.offset != ri.field_offset * 8:
-                print "[Info] Can't handle with arrays yet"
+                print("[Info] Can't handle with arrays yet")
             elif udt_member.type.get_size() != ri.recast_tinfo.get_size():
-                print "[Info] Can't recast different sizes yet"
+                print("[Info] Can't recast different sizes yet")
             else:
                 udt_data = idaapi.udt_type_data_t()
                 tinfo.get_udt_details(udt_data)

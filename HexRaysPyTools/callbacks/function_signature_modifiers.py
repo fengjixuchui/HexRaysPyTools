@@ -1,5 +1,5 @@
 import idaapi
-import actions
+from . import actions
 import HexRaysPyTools.core.const as const
 
 
@@ -29,7 +29,7 @@ class ConvertToUsercall(actions.HexRaysPopupAction):
         else:
             return
         function_tinfo.create_func(function_details)
-        idaapi.apply_tinfo2(vu.cfunc.entry_ea, function_tinfo, idaapi.TINFO_DEFINITE)
+        idaapi.apply_tinfo(vu.cfunc.entry_ea, function_tinfo, idaapi.TINFO_DEFINITE)
         vu.refresh_view(True)
 
 
@@ -54,7 +54,7 @@ class AddRemoveReturn(actions.HexRaysPopupAction):
         else:
             function_details.rettype = idaapi.tinfo_t(idaapi.BT_VOID)
         function_tinfo.create_func(function_details)
-        idaapi.apply_tinfo2(vu.cfunc.entry_ea, function_tinfo, idaapi.TINFO_DEFINITE)
+        idaapi.apply_tinfo(vu.cfunc.entry_ea, function_tinfo, idaapi.TINFO_DEFINITE)
         vu.refresh_view(True)
 
 
@@ -79,10 +79,10 @@ class RemoveArgument(actions.HexRaysPopupAction):
         function_tinfo.get_func_details(function_details)
         del_arg = vu.item.get_lvar()
 
-        function_details.erase(filter(lambda x: x.name == del_arg.name, function_details)[0])
+        function_details.erase([x for x in function_details if x.name == del_arg.name][0])
 
         function_tinfo.create_func(function_details)
-        idaapi.apply_tinfo2(vu.cfunc.entry_ea, function_tinfo, idaapi.TINFO_DEFINITE)
+        idaapi.apply_tinfo(vu.cfunc.entry_ea, function_tinfo, idaapi.TINFO_DEFINITE)
         vu.refresh_view(True)
 
 
