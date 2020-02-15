@@ -10,10 +10,13 @@ def demangled_name_to_c_str(name):
     """
     if not BAD_C_NAME_PATTERN.findall(name):
         return name
+
+    # FIXME: This is very ugly way to find and replace illegal characters
     idx = name.find("::operator")
     if idx >= 0:
         idx += len("::operator")
-        if idx == len(name) and not BAD_C_NAME_PATTERN.findall(name[idx]):
+        if idx == len(name) or name[idx].isalpha():
+            # `operator` is part of name of some name and not a keyword
             pass
         elif name[idx:idx + 2] == "==":
             name = name.replace("operator==", "operator_EQ_")
@@ -93,6 +96,10 @@ def demangled_name_to_c_str(name):
             name = name.replace("operator new", "operator_NEW_")
         elif name[idx: idx + 7] == " delete":
             name = name.replace("operator delete", "operator_DELETE_")
+        elif name[idx:idx + 2] == "\"\" ":
+            name = name.replace("operator\"\" ", "operator_LITERAL_")
+        elif name[idx] == "~":
+            name = name.replace("operator~", "operator_NOT_")
         elif name[idx] == ' ':
             pass
         else:

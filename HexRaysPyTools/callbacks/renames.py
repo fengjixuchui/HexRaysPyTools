@@ -192,6 +192,9 @@ class _RenameUsingAssertVisitor(idaapi.ctree_parentee_t):
 
     def __add_func_name(self, arg_expr):
         new_name = idc.get_strlit_contents(arg_expr.obj_ea)
+        if type(new_name) is not str:
+            # convert bytes to str (python 3)
+            new_name = new_name.decode('ascii')
         if not idaapi.is_valid_typename(new_name):
             logger.warn("Argument has a weird name `{}` at {}".format(
                 new_name, helper.to_hex(helper.find_asm_address(arg_expr, self.parents))))
@@ -229,6 +232,9 @@ class RenameUsingAssert(actions.HexRaysPopupAction):
         obj_ea = expression.obj_ea
         if not helper.is_code_ea(obj_ea) and idc.get_str_type(obj_ea) == idc.STRTYPE_C:
             str_potential_name = idc.get_strlit_contents(obj_ea)
+            if type(str_potential_name) is not str:
+                # convert bytes to str (python 3)
+                str_potential_name = str_potential_name.decode('ascii')
             return idaapi.is_valid_typename(str_potential_name)
         return False
 

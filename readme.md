@@ -18,6 +18,8 @@ About
 
 The plugin assists in the creation of classes/structures and detection of virtual tables. It also facilitates transforming decompiler output faster and allows to do some stuff which is otherwise impossible.
 
+**Note**: The plugin supports IDA Pro 7.x with Python 2/3.
+
 Installation
 ============
 
@@ -94,9 +96,11 @@ __Recognize Shape__ - looks for appropriates structure for selected fields.
 
 __Resolve Conflicts (new)__ - attempts to disable less meaningful fields in favor of more useful ones. (`char` > `_BYTE`, `SOCKET` > `_DWORD` etc). Doesn't help to find arrays.
 
-### Structure Cross-references (Alt + X)
+### Structure Cross-references (Ctrl + X)
 
 With HexRaysPyTools, every time the F5 button is pressed and code is decompiled, the information about addressing to fields is stored inside cache. It can be retrieved with the "Field Xrefs" menu. So, it is better to apply reconstructed types to as many locations as possible to have more information about the way structures are used.
+
+Note: IDA 7.4 has now an official implementation of this feature, available through Shift-X hotkey.
 
 ### Guessing Allocation
 

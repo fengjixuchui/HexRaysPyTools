@@ -9,14 +9,14 @@ class ActionManager(object):
 
     def register(self, action):
         self.__actions.append(action)
+        idaapi.register_action(
+                idaapi.action_desc_t(action.name, action.description, action, action.hotkey)
+            )
         if isinstance(action, HexRaysPopupAction):
             hx_callback_manager.register(idaapi.hxe_populating_popup, HexRaysPopupRequestHandler(action))
 
     def initialize(self):
-        for action in self.__actions:
-            idaapi.register_action(
-                idaapi.action_desc_t(action.name, action.description, action, action.hotkey)
-            )
+        pass
 
     def finalize(self):
         for action in self.__actions:
@@ -65,7 +65,8 @@ class HexRaysPopupAction(Action):
         # type: (idaapi.action_activation_ctx_t) -> None
         raise NotImplementedError
 
-    def check(self, hx_view: idaapi.vdui_t):
+    def check(self, hx_view):
+        # type: (idaapi.vdui_t) -> bool
         raise NotImplementedError
 
     def update(self, ctx):

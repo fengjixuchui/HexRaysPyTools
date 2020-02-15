@@ -8,7 +8,6 @@ import idc
 from . import common
 from . import const
 from . import helper
-from . import variable_scanner
 import HexRaysPyTools.api as api
 from HexRaysPyTools.forms import MyChoose
 
@@ -172,7 +171,7 @@ class ImportedVirtualFunction(VirtualFunction):
     def tinfo(self):
         print("[INFO] Ignoring import function at 0x{0:08X}".format(self.address))
         tinfo = idaapi.tinfo_t()
-        if idaapi.guess_tinfo2(self.address, tinfo):
+        if idaapi.guess_tinfo(tinfo, self.address):
             return tinfo
         return const.DUMMY_FUNC
 
@@ -303,6 +302,7 @@ class VirtualTable(AbstractMember):
         if helper.FunctionTouchVisitor(function).process():
             function = idaapi.decompile(self.virtual_functions[index].address)
         if function.arguments and function.arguments[0].is_arg_var and helper.is_legal_type(function.arguments[0].tif):
+            from . import variable_scanner
             print("[Info] Scanning virtual function at 0x{0:08X}".format(function.entry_ea))
             obj = api.VariableObject(function.get_lvars()[0], 0)
             scanner = variable_scanner.NewDeepSearchVisitor(function, self.offset, obj, temp_struct)
@@ -359,13 +359,13 @@ class VirtualTable(AbstractMember):
             else:
                 segment = idaapi.getseg(func_address)
                 if segment and segment.perm & idaapi.SEGPERM_EXEC:
-                    idc.MakeUnknown(func_address, 1, idaapi.DOUNK_SIMPLE)
-                    if idc.MakeFunction(func_address):
+                    idc.del_items(func_address, 1, idaapi.DELIT_SIMPLE)
+                    if idc.add_func(func_address):
                         functions_count += 1
                         address += const.EA_SIZE
                         continue
                 break
-            idaapi.autoWait()
+            idaapi.auto_wait()
         return functions_count
 
     @property
@@ -404,7 +404,7 @@ class Member(AbstractMember):
         return udt_member
 
     def activate(self, temp_struct):
-        new_type_declaration = idaapi.askstr(0x100, self.type_name, "Enter type:")
+        new_type_declaration = idaapi.ask_str(self.type_name, 0x100, "Enter type:")
         if new_type_declaration is None:
             return
 
@@ -567,7 +567,7 @@ class TemporaryStructureModel(QtCore.QAbstractTableModel):
                     "Structure already exist. Do you want to overwrite it?",
                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
                 )
-                if reply == QtGui.QMessageBox.Yes:
+                if reply == QtWidgets.QMessageBox.Yes:
                     idaapi.del_numbered_type(idaapi.cvar.idati, previous_ordinal)
                     ordinal = idaapi.idc_set_local_type(previous_ordinal, cdecl, idaapi.PT_TYP)
                 else:
